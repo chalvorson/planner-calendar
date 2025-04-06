@@ -10,9 +10,9 @@ import pandas as pd
 # Constant for hue step
 HUE_STEP = 29
 
-def generate_calendar_html(tasks_df, no_wrap_text, year, task_colors, prefix_label):
+def generate_calendar_html(tasks_df, no_wrap_text, year, task_colors, prefix_label, month=None):
     """
-    Generates a year-at-a-glance HTML calendar.
+    Generates a year-at-a-glance HTML calendar or a single month calendar.
 
     Args:
         tasks_df (pd.DataFrame): DataFrame containing tasks with 'Start date', 'Due date', and 'Task Name'.
@@ -20,6 +20,9 @@ def generate_calendar_html(tasks_df, no_wrap_text, year, task_colors, prefix_lab
                              line if they exceed the available space.
         year (int): The year for which the calendar is generated.
         task_colors (dict): A dictionary mapping task names to their respective color codes.
+        prefix_label (bool): Whether to prefix task names with their labels.
+        month (int or str, optional): If provided, generates only the calendar for this month.
+                                     Can be an integer (1-12) or a month name (e.g., "January").
 
     Returns:
         str: The generated HTML content as a string.
@@ -70,6 +73,34 @@ def generate_calendar_html(tasks_df, no_wrap_text, year, task_colors, prefix_lab
 
     # --- HTML Generation ---
     # Using a list to build the HTML is more efficient than string concatenation
+    
+    # Convert month to integer if it's a string
+    month_num = None
+    if month is not None:
+        if isinstance(month, str):
+            try:
+                # Try to convert month name to number
+                month_names = {name.lower(): num for num, name in enumerate(calendar.month_name) if num > 0}
+                month_num = month_names.get(month.lower())
+                if month_num is None:
+                    # Try to parse as a number
+                    month_num = int(month)
+            except (ValueError, KeyError):
+                # If conversion fails, default to None (full year)
+                month_num = None
+        else:
+            # If month is already a number
+            month_num = month
+    
+    # Title based on whether we're showing a single month or the full year
+    title_text = f"Yearly Planner Calendar - {year}"
+    grid_columns = "repeat(3, 1fr)"  # Default for year view (3 columns)
+    
+    if month_num is not None:
+        month_name = calendar.month_name[month_num]
+        title_text = f"{month_name} {year} Calendar"
+        grid_columns = "1fr"  # Single column for month view
+    
     html_parts = [
         f"""<!DOCTYPE html>
 <html lang="en">
@@ -79,7 +110,7 @@ def generate_calendar_html(tasks_df, no_wrap_text, year, task_colors, prefix_lab
     <title>Planner Calendar - {year}</title>
     <style>
         body {{ font-family: sans-serif; font-size: 8px; }}
-        .year-grid {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }}
+        .year-grid {{ display: grid; grid-template-columns: {grid_columns}; gap: 20px; }}
         .month {{ border: 1px solid #ccc; padding: 5px; }}
         .month-title {{ text-align: center; font-weight: bold; font-size: 12px; margin-bottom: 5px; }}
         .calendar-grid {{ display: grid; grid-template-columns: repeat(7, 1fr); border-collapse: collapse; 
@@ -95,6 +126,11 @@ def generate_calendar_html(tasks_df, no_wrap_text, year, task_colors, prefix_lab
         .task {{ display: block; white-space: {wrapping}; overflow: hidden; text-overflow: ellipsis; 
         margin-bottom: 1px; padding: 0 1px; border-radius: 2px; border: 1px solid #ccc; color: #000; 
         /* Ensure text is black */}}
+        /* Single month view */
+        .single-month .day {{ height: 100px; }}
+        .single-month .day-number {{ font-size: 12px; }}
+        .single-month .day-header {{ font-size: 12px; }}
+        .single-month .task {{ font-size: 9px; }}
         /* Print specific styles */
         @media print {{
             @page {{ size: 17in 11in landscape; margin: 0.5in; }} /* 11x17 Landscape */
@@ -111,16 +147,19 @@ def generate_calendar_html(tasks_df, no_wrap_text, year, task_colors, prefix_lab
     </style>
 </head>
 <body>
-    <h1 style="text-align: center;">Yearly Planner Calendar - {year}</h1>
-    <div class="year-grid">
+    <h1 style="text-align: center;">{title_text}</h1>
+    <div class="year-grid{' single-month' if month_num is not None else ''}">
 """
     ]
 
     cal = calendar.Calendar(firstweekday=calendar.SUNDAY)  # Start weeks on Sunday
 
-    for month_num in range(1, 13):
-        month_name = calendar.month_name[month_num]
-        month_weeks = cal.monthdatescalendar(year, month_num)
+    # If a specific month is provided, only generate that month
+    month_range = [month_num] if month_num is not None else range(1, 13)
+
+    for current_month in month_range:
+        month_name = calendar.month_name[current_month]
+        month_weeks = cal.monthdatescalendar(year, current_month)
 
         html_parts.append('<div class="month">')
         html_parts.append(f'  <div class="month-title">{month_name} {year}</div>')
@@ -199,6 +238,12 @@ def main():
         help="Force a specific year for the calendar. If not provided, uses the earliest start year found.",
     )
     parser.add_argument(
+        "-m",
+        "--month",
+        help=("Generate calendar for a specific month only. "
+            "Can be a month name (e.g., 'January') or number (1-12)."),
+    )
+    parser.add_argument(
         "--no-wrap-text",
         action="store_true",
         help="Do not wrap task names that exceed the available space.",
@@ -255,9 +300,9 @@ def main():
         sys.exit(1)
     except ValueError as e:
         if "Worksheet named 'Tasks' not found" in str(e):
+            error_msg = f"Error: Worksheet named 'Tasks' not found in {args.excel_file}."
             print(
-                f"Error: Worksheet named 'Tasks' not found in {args.excel_file}. "
-                "Please ensure the Planner export format is correct.",
+                f"{error_msg} Please ensure the Planner export format is correct.",
                 file=sys.stderr,
             )
         else:
@@ -265,7 +310,8 @@ def main():
         sys.exit(1)
     except ImportError:
         print(
-            "Error: Missing dependency 'openpyxl'. Please install it: pip install openpyxl", file=sys.stderr
+            "Error: Missing dependency 'openpyxl'. Please install it: pip install openpyxl", 
+            file=sys.stderr
         )
         sys.exit(1)
     except Exception as e:
@@ -344,16 +390,35 @@ def main():
         else:
             # If no valid start dates, default to current year or ask user? Defaulting for now.
             target_year = datetime.now().year
+            warning_msg = "Warning: Could not determine year from 'Start date'."
             print(
-                "Warning: Could not determine year from 'Start date'. "
-                f"Defaulting to current year: {target_year}",
+                f"{warning_msg} Defaulting to current year: {target_year}",
                 file=sys.stderr,
             )
 
     print(f"Generating calendar for the year: {target_year}")
 
+    # Process month argument if provided
+    target_month = None
+    if args.month:
+        try:
+            # Try to convert to integer (1-12)
+            target_month = int(args.month)
+            if target_month < 1 or target_month > 12:
+                print(f"Error: Month must be between 1 and 12, got {target_month}", file=sys.stderr)
+                sys.exit(1)
+        except ValueError:
+            # Try to match month name
+            month_names = {name.lower(): num for num, name in enumerate(calendar.month_name) if num > 0}
+            target_month = month_names.get(args.month.lower())
+            if target_month is None:
+                print(f"Error: Invalid month name: {args.month}", file=sys.stderr)
+                valid_months = ', '.join(name for name in calendar.month_name[1:])
+                print(f"Valid month names are: {valid_months}", file=sys.stderr)
+                sys.exit(1)
+    
     html_content = generate_calendar_html(
-        tasks_df, args.no_wrap_text, target_year, task_colors, args.prefix_labels
+        tasks_df, args.no_wrap_text, target_year, task_colors, args.prefix_labels, target_month
     )
 
     try:

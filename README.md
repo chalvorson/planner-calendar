@@ -13,6 +13,11 @@ Generate a printable, year-at-a-glance HTML calendar from a Microsoft Planner Ex
 - Includes CSS optimized for printing on large format paper (e.g., 11" x 17") in landscape mode.
 - Allows customization of task color saturation and lightness via command-line arguments.
 - Automatically determines the calendar year based on the earliest task start date, or allows specifying a year manually.
+- Optionally generates a calendar for a specific month instead of the full year.
+
+## Unsupported
+
+- **Repeating tasks:** The script currently cannot support tasks that repeat due to the way the data is structured in the Excel export.
 
 ## Prerequisites
 
@@ -53,6 +58,11 @@ Run the script from your activated virtual environment, providing the path to yo
 uv run main.py path/to/your/PlannerExport.xlsx [OPTIONS]
 ```
 
+Or to run the GUI version:
+```bash
+uv run gui.py
+```
+
 **Arguments:**
 
 - `excel_file`: (Required) The path to the Microsoft Planner Excel export file (`.xlsx`). This file **must** contain a sheet named `Tasks` with columns `Task Name`, `Start date`, and `Due date`.
@@ -62,6 +72,7 @@ uv run main.py path/to/your/PlannerExport.xlsx [OPTIONS]
 - `-o OUTPUT`, `--output OUTPUT`: Specifies the name for the generated HTML file.
   (Default: `planner_calendar.html`)
 - `-y YEAR`, `--year YEAR`: Forces the calendar to be generated for a specific `YEAR` (e.g., `2024`). If omitted, the script uses the year of the earliest task start date found in the file.
+- `--month MONTH`: Generates a calendar for a specific month (e.g., `1` for January, `2` for February, etc.). If omitted, the script generates a full year calendar.
 - `--no-wrap-text`: Prevents task names from wrapping to the next line if they exceed the available space.
 - `--color-saturation SATURATION`: Sets the saturation level for generated task colors (a float between 0.0 and 1.0). Higher values mean more intense colors.
   (Default: `0.7`)
